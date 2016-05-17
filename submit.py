@@ -66,14 +66,21 @@ class QsubMagics(Magics):
     Usage: %%qsub var1 var2 var3 [--out tmpfile]
 
     --out  name of the output variable
-    --dry  only do a dry run'''
+    --dry  only do a dry run
+    --pre  lines to call before the cell
+    --post lines to call after the cell'''
 
     parser = argparse.ArgumentParser(description='Run the cell on a cluster.')
     parser.add_argument('vars', nargs='*', help='The variables to pass.')
-    parser.add_argument('--out', type=str, help='The name of output variable', default='')
+    parser.add_argument('--out', type=str,
+                        help='The name of output variable', default='')
     parser.add_argument('--dry', action='store_true', default=False, help='Do a dry run.')
-    parser.add_argument('--pre', nargs='*', help='Extra lines to execute before calling the python script.', default=[])
-    parser.add_argument('--post', nargs='*', help='Extra lines to execute after calling the python script.', default=[])
+    parser.add_argument('--pre', nargs='*',
+                        help='Extra lines to execute before calling the python script.',
+                        default=[])
+    parser.add_argument('--post', nargs='*',
+                        help='Extra lines to execute after calling the python script.',
+                        default=[])
 
     def __init__(self, shell):
         super(QsubMagics, self).__init__(shell=shell)
