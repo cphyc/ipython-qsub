@@ -6,6 +6,7 @@ from string import Template
 import os
 import sh
 from os.path import join as J
+import time
 
 try:
     import cPickle as pickle
@@ -23,14 +24,19 @@ with open('$dump', 'rb') as f:
     for el in _pickleLoaded:
         globals()[el] = _pickleLoaded[el]
 ''')
+pickleDump = Template('''if $doDump:
+    with open('$dump', 'wb') as f:
+        pickle.dump($outvar, f)
 
-def genPickleDump(outvar, dumpfile):
-    pickleDump = Template('''with open('$dump', 'wb') as f:
-        pickle.dump($outvar, f)''')
-    if outvar:
-        return pickleDump.substitute(outvar=outvar, dump=dumpfile)
-    else:
-        return ''
+import os
+os.utime('$isdonefile', None)''')
+
+def genPickleDump(outvar, dumpfile, donefile):
+
+    return pickleDump.substitute(doDump=(outvar != ''),
+                                 outvar=(outvar if outvar != '' else 'None'),
+                                 dump=dumpfile,
+                                 isdonefile=donefile)
 
 
 def gen_qsub_script(script, name='qsub_magic', nodes=1, ppn=1, walltime='01:00:00',
@@ -82,6 +88,8 @@ class QsubMagics(Magics):
                         help='Extra lines to execute after calling the python script.',
                         default=[])
 
+    # cmd = sh.bash()
+
     def __init__(self, shell):
         super(QsubMagics, self).__init__(shell=shell)
         self.ip = get_ipython()
@@ -103,13 +111,15 @@ class QsubMagics(Magics):
                 return
 
         # create tmpdir
-        tmpdir = tempfile.mkdtemp()
+        tmpdir = '/tmp/tmpdir' # tempfile.mkdtemp()
 
         dump_in_n = J(tmpdir, 'dump_in')
         python_file_n = J(tmpdir, 'script.py')
         bash_file_n = J(tmpdir, 'script.sh')
         dump_out_n = J(tmpdir, 'dump_out')
         logfile = J(tmpdir, 'log')
+        donefile = J(tmpdir, 'isdone')
+
         # get tmp files for io
         dump_in = open(dump_in_n, 'wb')
         python_file = open(python_file_n, 'w')
@@ -122,7 +132,8 @@ class QsubMagics(Magics):
             pickleLoad.substitute(dump=dump_in_n),
             cell,
             genPickleDump(dumpfile=dump_out_n,
-                          outvar=args.out))
+                          outvar=args.out,
+                          donefile=donefile))
         if not args.dry:
             # print(python_file, bash_file)
             # write the python and bash files
@@ -137,7 +148,11 @@ class QsubMagics(Magics):
             dump_in.flush()
 
             # execute process
-            p = sh.sh(bash_file_n)
+            p = sh.bash(bash_file_n)
+
+            while not os.path.isfile(donefile):
+                time.sleep(0.5)
+                print('sleeping')
 
             if args.out != '':
                 with open(dump_out_n, 'rb') as dump_out:
