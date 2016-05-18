@@ -27,20 +27,18 @@ with open('$dump', 'rb') as f:
 pickleDump = Template('''if $doDump:
     with open('$dump', 'wb') as f:
         pickle.dump($outvar, f)
+''')
 
-import os
-os.utime('$isdonefile', None)''')
-
-def genPickleDump(outvar, dumpfile, donefile):
+def genPickleDump(outvar, dumpfile):
 
     return pickleDump.substitute(doDump=(outvar != ''),
                                  outvar=(outvar if outvar != '' else 'None'),
-                                 dump=dumpfile,
-                                 isdonefile=donefile)
+                                 dump=dumpfile)
 
 
 def gen_qsub_script(script, name='qsub_magic', nodes=1, ppn=1, walltime='01:00:00',
-                    mailto='cadiou@iap.fr', path=os.getcwd(), pre=[], post=[], logfile=''):
+                    mailto='cadiou@iap.fr', path=os.getcwd(), pre=[], post=[], logfile='',
+                    isdonefile=''):
     ''' Generate a template to be runned using qsub.'''
     tplate = Template('\n'.join(
         ['#!/bin/sh',
@@ -55,10 +53,11 @@ def gen_qsub_script(script, name='qsub_magic', nodes=1, ppn=1, walltime='01:00:0
          pre +
          [ 'python $script > $logfile' ] +
          post +
-         ['']))
+         ['touch $isdonefile']))
     qsub_script = tplate.substitute(name=name, nodes=nodes, ppn=ppn,
                                     walltime=walltime, mailto=mailto,
-                                    path=path, script=script, logfile=logfile)
+                                    path=path, script=script, logfile=logfile,
+                                    isdonefile=isdonefile)
 
     return qsub_script
 
@@ -127,13 +126,13 @@ class QsubMagics(Magics):
 
         # generate the scripts
         qsub_script = gen_qsub_script(python_file_n, pre=args.pre, post=args.post,
-                                      logfile=logfile)
+                                      logfile=logfile, isdonefile=donefile)
+
         python_script = gen_python_script(
             pickleLoad.substitute(dump=dump_in_n),
             cell,
             genPickleDump(dumpfile=dump_out_n,
-                          outvar=args.out,
-                          donefile=donefile))
+                          outvar=args.out))
         if not args.dry:
             # print(python_file, bash_file)
             # write the python and bash files
@@ -152,20 +151,14 @@ class QsubMagics(Magics):
 
             while not os.path.isfile(donefile):
                 time.sleep(0.5)
-                print('sleeping')
 
             if args.out != '':
                 with open(dump_out_n, 'rb') as dump_out:
                     # load the result
                     res = pickle.load(dump_out)
 
-                    if type(res) == dict:
-                        # import into local namespace
-                        for key in res:
-                            self.ip.user_ns[key] = res[key]
-                    else:
-                        # import into local namespace using outname
-                        self.ip.user_ns[args.out] = res
+                    # import into local namespace using outname
+                    self.ip.user_ns[args.out] = res
 
         return
 
