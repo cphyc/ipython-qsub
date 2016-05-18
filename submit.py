@@ -83,6 +83,8 @@ class QsubMagics(Magics):
                         help='Do not clean temporary directory after script execution')
     parser.add_argument('--tmpdir', default=None,
                         help='Temporary directory to use. By default, generate a new and unique one each time.')
+    parser.add_argument('--qsub', default='qsub',
+                        help='The qsub command. Replace by sh to test on your local machine only.')
 
     # cmd = sh.bash()
 
@@ -148,7 +150,7 @@ class QsubMagics(Magics):
                 os.mkfifo(donefile)
 
                 # execute process
-                p = sh.qsub(bash_file_n, _bg=True)
+                p = sh.Command(args.qsub)(bash_file_n, _bg=True)
 
                 # wait for the task to complete
                 with open(donefile, 'r') as donefifo:
