@@ -115,11 +115,6 @@ class QsubMagics(Magics):
         logfile = J(tmpdir, 'log')
         donefile = J(tmpdir, 'isdone')
 
-        # get tmp files for io
-        dump_in     = open(dump_in_n, 'wb')
-        python_file = open(python_file_n, 'w')
-        bash_file   = open(bash_file_n, 'w')
-
         # generate the scripts
         qsub_script = gen_qsub_script(python_file_n, pre=args.pre, post=args.post,
                                       logfile=logfile, isdonefile=donefile)
@@ -132,15 +127,14 @@ class QsubMagics(Magics):
         if not args.dry:
             # print(python_file, bash_file)
             # write the python and bash files
-            python_file.write(python_script)
-            bash_file.write(qsub_script)
-
-            python_file.flush()
-            bash_file.flush()
+            with open(python_file_n, 'w') as python_file:
+                python_file.write(python_script)
+            with open(bash_file_n, 'w') as bash_file:
+                bash_file.write(qsub_script)
 
             # dump the input variables
-            pickle.dump(newNs, dump_in)
-            dump_in.flush()
+            with open(dump_in_n, 'wb') as dump_in:
+                pickle.dump(newNs, dump_in)
 
             # use fifo to wait for answer
             os.mkfifo(donefile)
@@ -149,15 +143,12 @@ class QsubMagics(Magics):
             p = sh.bash(bash_file_n, _bg=True)
 
             # wait for the task to complete
-            donefifo = open(donefile, 'r')
-
-            r = donefifo.read()
+            with open(donefile, 'r') as donefifo:
+                r = donefifo.read()
             try:
                 exit_status = int(r.split('\n')[0])
             except:
                 exit_status = r
-
-            donefifo.close()
 
             if exit_status != 0:
                 raise Exception('An exception occured, got exit status', exit_status)
