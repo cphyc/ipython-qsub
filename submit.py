@@ -147,7 +147,7 @@ class QsubMagics(Magics):
                 os.mkfifo(donefile)
 
                 # execute process
-                p = sh.bash(bash_file_n, _bg=True)
+                p = sh.qsub(bash_file_n, _bg=True)
 
                 # wait for the task to complete
                 with open(donefile, 'r') as donefifo:
