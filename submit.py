@@ -66,16 +66,7 @@ def gen_python_script(pre, body, post):
 
 @magics_class
 class QsubMagics(Magics):
-    '''Execute the content of the cell remotely using qsub
-
-    Usage: %%qsub var1 var2 var3 [--out tmpfile]
-
-    --out  name of the output variable
-    --dry  only do a dry run
-    --pre  lines to call before the cell
-    --post lines to call after the cell'''
-
-    parser = argparse.ArgumentParser(description='Run the cell on a cluster.')
+    parser = argparse.ArgumentParser(description='Execute the content of the cell remotely using qsub.')
     parser.add_argument('vars', nargs='*', help='The variables to pass.')
     parser.add_argument('--out', type=str,
                         help='The name of output variable', default='')
@@ -162,6 +153,7 @@ class QsubMagics(Magics):
 
         return
 
+    qsub.__doc__ = parser.format_help()
 
 
 def load_ipython_extension(ip):
