@@ -112,8 +112,8 @@ class QsubMagics(Magics):
                 tmpdir = tempfile.mkdtemp()
             else:
                 tmpdir = args.tmpdir
-                if not os.path.isdir(tmpdir):
-                    os.mkdir(tmpdir)
+                if not os.path.exists(tmpdir):
+                    os.makedirs(tmpdir)
 
             dump_in_n = J(tmpdir, 'dump_in')
             python_file_n = J(tmpdir, 'script.py')
@@ -136,6 +136,7 @@ class QsubMagics(Magics):
                 # write the python and bash files
                 with open(python_file_n, 'w') as python_file:
                     python_file.write(python_script)
+
                 with open(bash_file_n, 'w') as bash_file:
                     bash_file.write(qsub_script)
 
