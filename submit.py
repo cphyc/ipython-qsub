@@ -54,7 +54,8 @@ def gen_qsub_script(script, name='qsub_magic', nodes=1, ppn=1, walltime='01:00:0
         [ 'python $script > $logfile &&',
           '    echo 0 > $isdonefile ||',
           '    echo 1 > $isdonefile'] +
-        post))
+        post +
+        ['return 0']))
     qsub_script = tplate.substitute(name=name, nodes=nodes, ppn=ppn,
                                     walltime=walltime, mailto=mailto,
                                     path=path, script=script, logfile=logfile,
