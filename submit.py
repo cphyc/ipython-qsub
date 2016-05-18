@@ -81,6 +81,8 @@ class QsubMagics(Magics):
                         help='Name of the output variable (only 1 is supported for now)', default='')
     parser.add_argument('--noclean', action='store_true', default=False,
                         help='Do not clean temporary directory after script execution')
+    parser.add_argument('--tmpdir', default=None,
+                        help='Temporary directory to use. By default, generate a new and unique one each time.')
 
     # cmd = sh.bash()
 
@@ -105,74 +107,80 @@ class QsubMagics(Magics):
                 return
 
         # create tmpdir
-        tmpdir = tempfile.mkdtemp()
+        try:
+            if args.tmpdir == None:
+                tmpdir = tempfile.mkdtemp()
+            else:
+                tmpdir = args.tmpdir
+                if not os.path.isdir(tmpdir):
+                    os.mkdir(tmpdir)
 
-        dump_in_n = J(tmpdir, 'dump_in')
-        python_file_n = J(tmpdir, 'script.py')
-        bash_file_n = J(tmpdir, 'script.sh')
-        dump_out_n = J(tmpdir, 'dump_out')
-        logfile = J(tmpdir, 'log')
-        donefile = J(tmpdir, 'isdone')
+            dump_in_n = J(tmpdir, 'dump_in')
+            python_file_n = J(tmpdir, 'script.py')
+            bash_file_n = J(tmpdir, 'script.sh')
+            dump_out_n = J(tmpdir, 'dump_out')
+            logfile = J(tmpdir, 'log')
+            donefile = J(tmpdir, 'isdone')
 
-        # generate the scripts
-        qsub_script = gen_qsub_script(python_file_n, pre=args.pre, post=args.post,
-                                      logfile=logfile, isdonefile=donefile)
+            # generate the scripts
+            qsub_script = gen_qsub_script(python_file_n, pre=args.pre, post=args.post,
+                                          logfile=logfile, isdonefile=donefile)
 
-        python_script = gen_python_script(
-            pickleLoad.substitute(dump=dump_in_n),
-            cell,
-            genPickleDump(dumpfile=dump_out_n,
-                          outvar=args.out))
-        if not args.dry:
-            # print(python_file, bash_file)
-            # write the python and bash files
-            with open(python_file_n, 'w') as python_file:
-                python_file.write(python_script)
-            with open(bash_file_n, 'w') as bash_file:
-                bash_file.write(qsub_script)
+            python_script = gen_python_script(
+                pickleLoad.substitute(dump=dump_in_n),
+                cell,
+                genPickleDump(dumpfile=dump_out_n,
+                              outvar=args.out))
+            if not args.dry:
+                # print(python_file, bash_file)
+                # write the python and bash files
+                with open(python_file_n, 'w') as python_file:
+                    python_file.write(python_script)
+                with open(bash_file_n, 'w') as bash_file:
+                    bash_file.write(qsub_script)
 
-            # dump the input variables
-            with open(dump_in_n, 'wb') as dump_in:
-                pickle.dump(newNs, dump_in)
+                # dump the input variables
+                with open(dump_in_n, 'wb') as dump_in:
+                    pickle.dump(newNs, dump_in)
 
-            # use fifo to wait for answer
-            os.mkfifo(donefile)
+                # use fifo to wait for answer
+                os.mkfifo(donefile)
 
-            # execute process
-            p = sh.bash(bash_file_n, _bg=True)
+                # execute process
+                p = sh.bash(bash_file_n, _bg=True)
 
-            # wait for the task to complete
-            with open(donefile, 'r') as donefifo:
-                r = donefifo.read()
-            try:
-                exit_status = int(r.split('\n')[0])
-            except:
-                exit_status = r
+                # wait for the task to complete
+                with open(donefile, 'r') as donefifo:
+                    r = donefifo.read()
+                try:
+                    exit_status = int(r.split('\n')[0])
+                except:
+                    exit_status = r
 
-            if exit_status != 0:
-                raise Exception('An exception occured, got exit status', exit_status)
+                if exit_status != 0:
+                    raise Exception('An exception occured, got exit status', exit_status)
 
-            if args.out != '':
-                with open(dump_out_n, 'rb') as dump_out:
-                    # load the result
-                    res = pickle.load(dump_out)
+                if args.out != '':
+                    with open(dump_out_n, 'rb') as dump_out:
+                        # load the result
+                        res = pickle.load(dump_out)
 
-                    # import into local namespace using outname
-                    self.ip.user_ns[args.out] = res
-        else:
-            print('Bash script')
-            print('-----------')
-            print(qsub_script)
-            print()
-            print('Python script')
-            print('-------------')
-            print(python_script)
-            print()
-            print('Temporary directory:', tmpdir)
-            print(sh.ls(tmpdir))
-
-        if not args.noclean:
-            sh.rm(tmpdir, r=True, f=True)
+                        # import into local namespace using outname
+                        self.ip.user_ns[args.out] = res
+            else:
+                print('Bash script')
+                print('-----------')
+                print(qsub_script)
+                print()
+                print('Python script')
+                print('-------------')
+                print(python_script)
+                print()
+                print('Temporary directory:', tmpdir)
+                print(sh.ls(tmpdir))
+        finally:
+            if not args.noclean:
+                sh.rm(tmpdir, r=True, f=True)
 
         return
 
