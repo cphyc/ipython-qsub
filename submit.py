@@ -105,8 +105,7 @@ class QsubMagics(Magics):
                 return
 
         # create tmpdir
-        tmpdir = '/tmp/tmpdir' # tempfile.mkdtemp()
-        sh.mkdir(tmpdir, p=True)
+        tmpdir = tempfile.mkdtemp()
 
         dump_in_n = J(tmpdir, 'dump_in')
         python_file_n = J(tmpdir, 'script.py')
