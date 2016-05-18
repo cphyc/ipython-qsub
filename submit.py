@@ -51,9 +51,10 @@ def gen_qsub_script(script, name='qsub_magic', nodes=1, ppn=1, walltime='01:00:0
          'cd $path',
          'ulimit -s unlimited'] +
          pre +
-         [ 'python $script > $logfile' ] +
-         post +
-         ['touch $isdonefile']))
+        [ 'python $script > $logfile &&',
+          '    echo 0 > $isdonefile ||',
+          '    echo 1 > $isdonefile'] +
+        post))
     qsub_script = tplate.substitute(name=name, nodes=nodes, ppn=ppn,
                                     walltime=walltime, mailto=mailto,
                                     path=path, script=script, logfile=logfile,
@@ -66,10 +67,9 @@ def gen_python_script(pre, body, post):
 
 @magics_class
 class QsubMagics(Magics):
-    parser = argparse.ArgumentParser(description='Execute the content of the cell remotely using qsub.')
+    parser = argparse.ArgumentParser(description='Execute the content of the cell remotely using qsub.',
+                                     prog='%%qsub', add_help=False)
     parser.add_argument('vars', nargs='*', help='The variables to pass.')
-    parser.add_argument('--out', type=str,
-                        help='The name of output variable', default='')
     parser.add_argument('--dry', action='store_true', default=False, help='Do a dry run.')
     parser.add_argument('--pre', nargs='*',
                         help='Extra lines to execute before calling the python script.',
@@ -77,6 +77,10 @@ class QsubMagics(Magics):
     parser.add_argument('--post', nargs='*',
                         help='Extra lines to execute after calling the python script.',
                         default=[])
+    parser.add_argument('--out', metavar='outvar', type=str,
+                        help='Name of the output variable (only 1 is supported for now)', default='')
+    parser.add_argument('--noclean', action='store_true', default=False,
+                        help='Do not clean temporary directory after script execution')
 
     # cmd = sh.bash()
 
@@ -102,6 +106,7 @@ class QsubMagics(Magics):
 
         # create tmpdir
         tmpdir = '/tmp/tmpdir' # tempfile.mkdtemp()
+        sh.mkdir(tmpdir, p=True)
 
         dump_in_n = J(tmpdir, 'dump_in')
         python_file_n = J(tmpdir, 'script.py')
@@ -111,9 +116,9 @@ class QsubMagics(Magics):
         donefile = J(tmpdir, 'isdone')
 
         # get tmp files for io
-        dump_in = open(dump_in_n, 'wb')
+        dump_in     = open(dump_in_n, 'wb')
         python_file = open(python_file_n, 'w')
-        bash_file = open(bash_file_n, 'w')
+        bash_file   = open(bash_file_n, 'w')
 
         # generate the scripts
         qsub_script = gen_qsub_script(python_file_n, pre=args.pre, post=args.post,
@@ -137,11 +142,25 @@ class QsubMagics(Magics):
             pickle.dump(newNs, dump_in)
             dump_in.flush()
 
-            # execute process
-            p = sh.bash(bash_file_n)
+            # use fifo to wait for answer
+            os.mkfifo(donefile)
 
-            while not os.path.isfile(donefile):
-                time.sleep(0.5)
+            # execute process
+            p = sh.bash(bash_file_n, _bg=True)
+
+            # wait for the task to complete
+            donefifo = open(donefile, 'r')
+
+            r = donefifo.read()
+            try:
+                exit_status = int(r.split('\n')[0])
+            except:
+                exit_status = r
+
+            donefifo.close()
+
+            if exit_status != 0:
+                raise Exception('An exception occured, got exit status', exit_status)
 
             if args.out != '':
                 with open(dump_out_n, 'rb') as dump_out:
@@ -150,6 +169,20 @@ class QsubMagics(Magics):
 
                     # import into local namespace using outname
                     self.ip.user_ns[args.out] = res
+        else:
+            print('Bash script')
+            print('-----------')
+            print(qsub_script)
+            print()
+            print('Python script')
+            print('-------------')
+            print(python_script)
+            print()
+            print('Temporary directory:', tmpdir)
+            print(sh.ls(tmpdir))
+
+        if not args.noclean:
+            sh.rm(tmpdir, r=True, f=True)
 
         return
 
